@@ -16,82 +16,80 @@ int augmented_matrix[ORDER][2 * ORDER];
 
 void print_matrix_float() {
     printf("\nInverted test_matrix (fixed-point, shown as float):\n");
-    for (int i = 0; i < ORDER; i++) {
-        for (int j = ORDER; j < 2 * ORDER; j++) {
-            printf("%7.4f ", (float)augmented_matrix[i][j] / SCALE);
+    for (int row = 0; row < ORDER; row++) {
+        for (int column = ORDER; column < 2 * ORDER; column++) {
+            printf("%7.4f ", (float)augmented_matrix[row][column] / SCALE);
         }
         printf("\n");
     }
 }
 
 void augment_matrix() {
-    for (int i = 0; i < ORDER; i++) {
-        for (int j = 0; j < 2 * ORDER; j++) {
-            if (j < ORDER)
-                augmented_matrix[i][j] = test_matrix[i][j] << SHIFT_AMOUNT;  // shift input
+    for (int row = 0; row < ORDER; row++) {
+        for (int column = 0; column < 2 * ORDER; column++) {
+            if (column < ORDER)
+                augmented_matrix[row][column] = test_matrix[row][column] << SHIFT_AMOUNT;  // shift input
             else
-                augmented_matrix[i][j] = (j - ORDER == i) ? SCALE : 0; // identity test_matrix in fixed-point
+                augmented_matrix[row][column] = (column - ORDER == row) ? SCALE : 0; // identity test_matrix in fixed-point
         }
     }
 }
 
 void swap_rows(int row1, int row2) {
-    for (int j = 0; j < 2 * ORDER; j++) {
-        int temp = augmented_matrix[row1][j];
-        augmented_matrix[row1][j] = augmented_matrix[row2][j];
-        augmented_matrix[row2][j] = temp;
+    for (int column = 0; column < 2 * ORDER; column++) {
+        int temp = augmented_matrix[row1][column];
+        augmented_matrix[row1][column] = augmented_matrix[row2][column];
+        augmented_matrix[row2][column] = temp;
     }
 }
 
 int find_pivot_row(int column) {
     int pivot_row = column;
     int max_val = abs(augmented_matrix[column][column]);
-    for (int i = column + 1; i < ORDER; i++) {
-        if (abs(augmented_matrix[i][column]) > max_val) {
-            pivot_row = i;
-            max_val = abs(augmented_matrix[i][column]);
+    for (int row = column + 1; row < ORDER; row++) {
+        if (abs(augmented_matrix[row][column]) > max_val) {
+            pivot_row = row;
+            max_val = abs(augmented_matrix[row][column]);
         }
     }
     return pivot_row;
 }
 
 void normalize_row(int row, int pivot_val) {
-    for (int j = 0; j < 2 * ORDER; j++) {
-        augmented_matrix[row][j] = (augmented_matrix[row][j] << SHIFT_AMOUNT) / pivot_val;
+    for (int column = 0; column < 2 * ORDER; column++) {
+        augmented_matrix[row][column] = (augmented_matrix[row][column] << SHIFT_AMOUNT) / pivot_val;
     }
 }
 
 void eliminate_other_rows(int pivot_row, int pivot_col) {
-    for (int i = 0; i < ORDER; i++) {
-        if (i == pivot_row) continue;
-        int factor = augmented_matrix[i][pivot_col];
-        for (int j = 0; j < 2 * ORDER; j++) {
-            augmented_matrix[i][j] -= (factor * augmented_matrix[pivot_row][j]) >> SHIFT_AMOUNT;
+    for (int row = 0; row < ORDER; row++) {
+        if (row == pivot_row) continue;
+        int factor = augmented_matrix[row][pivot_col];
+        for (int column = 0; column < 2 * ORDER; column++) {
+            augmented_matrix[row][column] -= (factor * augmented_matrix[pivot_row][column]) >> SHIFT_AMOUNT;
         }
     }
 }
 
-
-
 void gauss_jordan_fixed_point() {
-    for (int col = 0; col < ORDER; col++) {
+    for (int column = 0; column < ORDER; column++) {
         // Pivot: find row with max absolute value in current column
-        int pivot_row = find_pivot_row(col);
-        if (pivot_row != col) {
-            swap_rows(pivot_row, col);
+        int pivot_row = find_pivot_row(column);
+        if (pivot_row != column) {
+            swap_rows(pivot_row, column);
         }
 
-        int pivot_val = augmented_matrix[col][col];
-        normalize_row(col, pivot_val);
-        eliminate_other_rows(col, col);
+        int pivot_val = augmented_matrix[column][column];
+        normalize_row(column, pivot_val);
+        eliminate_other_rows(column, column);
     }
 }
 
 int main() {
     printf("Original test_matrix:\n");
-    for (int i = 0; i < ORDER; i++) {
-        for (int j = 0; j < ORDER; j++) {
-            printf("%d ", test_matrix[i][j]);
+    for (int row = 0; row < ORDER; row++) {
+        for (int column = 0; column < ORDER; column++) {
+            printf("%d ", test_matrix[row][column]);
         }
         printf("\n");
     }
