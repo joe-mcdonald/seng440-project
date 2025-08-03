@@ -17,6 +17,11 @@ int test_matrix[ORDER][ORDER] = {
 // The augmented matrix will have the original matrix on the left and the identity matrix on the right
 int augmented_matrix[ORDER][2 * ORDER];
 
+
+
+
+
+
 // ---- Output Helper ---- //
 void print_matrix_float() {
     printf("\nInverted test_matrix (fixed-point, shown as float):\n");
@@ -112,9 +117,33 @@ void gauss_jordan_fixed_point() {
     }
 }
 
+int estimate_condition_number(int matrix[ORDER][ORDER]) {
+    int condition_number = 0;
+    for (int row = 0; row < ORDER; row++) {
+        int row_sum = 0;
+        for (int column = 0; column < ORDER; column++) {
+            if (matrix[row][column] < 0) {
+                row_sum += -1 * matrix[row][column];
+            } else {
+                row_sum += matrix[row][column];
+            }
+        }
+        if (row_sum > condition_number) {
+            condition_number = row_sum;
+        }
+    }
+    // The condition number is the product of the norm and the inverse of the norm.
+    return condition_number;
+}
+
 int main() {
     // Print the original matrix for reference
     printf("Original test_matrix:\n");
+
+    float cond_estimate = estimate_condition_number(test_matrix);
+    printf("\nEstimated (pre-execution) condition number (∞-norm): %.4f\n", cond_estimate);
+
+
     // use clean loops, avoid excess memory copies.
     for (int row = 0; row < ORDER; row++) {
         for (int column = 0; column < ORDER; column++) {
@@ -126,6 +155,7 @@ int main() {
     augment_matrix();
     gauss_jordan_fixed_point();
     print_matrix_float();
+
 
     return 0;
 }
