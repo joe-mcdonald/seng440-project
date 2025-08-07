@@ -4,14 +4,41 @@
 #include <time.h>
 #include <arm_neon.h>
 
-#define ORDER 3
+// #define ORDER 3
+#define ORDER 16
 #define SHIFT_AMOUNT 8
 #define SCALE (1 << SHIFT_AMOUNT)
 
+// int test_matrix[ORDER][ORDER] = {
+//     {3, 2, -4},
+//     {2, 3, 3},
+//     {5, -3, 1}
+// };
+
+// int test_matrix[ORDER][ORDER] = {
+//     {2, 3, 4, -2},
+//     {-1, 2, 5, 3},
+//     {3, 3, -1, 2},
+//     {1, 2, 3, 4}
+// };
+
 int test_matrix[ORDER][ORDER] = {
-    {3, 2, -4},
-    {2, 3, 3},
-    {5, -3, 1}
+    {16, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 1},
+    {1, 15, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 2},
+    {2, 1, 14, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 3},
+    {3, 2, 1, 13, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 4},
+    {4, 3, 2, 1, 12, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 5},
+    {5, 4, 3, 2, 1, 11, 2, 3, 4, 5, 6, 7, 8, 9, 10, 6},
+    {6, 5, 4, 3, 2, 1, 10, 2, 3, 4, 5, 6, 7, 8, 9, 7},
+    {7, 6, 5, 4, 3, 2, 1, 9, 2, 3, 4, 5, 6, 7, 8, 8},
+    {8, 7, 6, 5, 4, 3, 2, 1, 8, 2, 3, 4, 5, 6, 7, 9},
+    {9, 8, 7, 6, 5, 4, 3, 2, 1, 7, 2, 3, 4, 5, 6, 10},
+    {10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 6, 2, 3, 4, 5, 11},
+    {11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 5, 2, 3, 4, 12},
+    {12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 4, 2, 3, 13},
+    {13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 3, 2, 14},
+    {14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 2, 15},
+    {15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 16}
 };
 
 // Stored in fixed-point format to avoid floating-point arithmetic
@@ -103,6 +130,12 @@ void normalize_row(int row, int pivot_val) {
 // This function eliminates the values in the current column for all other rows using the pivot row.
 // It subtracts the appropriate multiple of the pivot row from each other row.
 void eliminate_other_rows(int pivot_row, int pivot_col) {
+    // Load the pivot row values into a cache
+    // This is to avoid loading the same row multiple times in the loop.
+    int32_t pivot_cache[2 * ORDER];
+    for (int col = 0; col < 2 * ORDER; col++) {
+        pivot_cache[col] = augmented_matrix[pivot_row][col];
+    }
     for (int row = 0; row < ORDER; row++) {
         if (row == pivot_row) continue;
 
@@ -112,7 +145,7 @@ void eliminate_other_rows(int pivot_row, int pivot_col) {
 
         // Vectorized part — handles chunks of 4
         for (; col <= 2 * ORDER - 4; col += 4) {
-            int32x4_t pivot_vals = vld1q_s32(&augmented_matrix[pivot_row][col]);
+            int32x4_t pivot_vals = vld1q_s32(&pivot_cache[col]);
             int32x4_t row_vals = vld1q_s32(&augmented_matrix[row][col]);
 
             int32x4_t scaled = vmulq_n_s32(pivot_vals, factor);
