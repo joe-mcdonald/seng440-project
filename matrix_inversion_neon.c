@@ -2,6 +2,7 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <time.h>
+#include <arm_neon.h>
 
 #define ORDER 3
 #define SHIFT_AMOUNT 8
@@ -19,10 +20,6 @@ int test_matrix[ORDER][ORDER] = {
 int augmented_matrix[ORDER][2 * ORDER];
 
 
-
-
-
-
 // ---- Output Helper ---- //
 void print_matrix_float() {
     printf("\nInverted test_matrix (fixed-point, shown as float):\n");
@@ -37,16 +34,25 @@ void print_matrix_float() {
 
 // ---- Step 1: Initialize the augmented matrix ---- //
 void augment_matrix() {
-    // Uses well-structured nested loops. Row-major order is maintained, which is good for cache performance.
     for (int row = 0; row < ORDER; row++) {
-        for (int column = 0; column < 2 * ORDER; column++) {
-            if (column < ORDER)
-                augmented_matrix[row][column] = test_matrix[row][column] << SHIFT_AMOUNT;  // shift input
-            else
-                augmented_matrix[row][column] = (column - ORDER == row) ? SCALE : 0; // identity test_matrix in fixed-point
+        // Vector for shifting left side (matrix A)
+        for (int column = 0; column < ORDER; column += 4) {
+            int32_t input[4] = {0};
+            for (int k = 0; k < 4 && (column + k) < ORDER; ++k)
+                input[k] = test_matrix[row][column + k];
+
+            int32x4_t vec = vld1q_s32(input);
+            vec = vshlq_n_s32(vec, SHIFT_AMOUNT);
+            vst1q_s32(&augmented_matrix[row][column], vec);
+        }
+
+        // Fill identity on right side (matrix I)
+        for (int column = ORDER; column < 2 * ORDER; column++) {
+            augmented_matrix[row][column] = (column - ORDER == row) ? SCALE : 0;
         }
     }
 }
+
 
 // ---- Step 2: Row swapping for pivoting ---- //
 void swap_rows(int row1, int row2) {
@@ -77,27 +83,52 @@ int find_pivot_row(int column) {
 
 // ---- Step 4: Normalize the pivot row ---- //
 void normalize_row(int row, int pivot_val) {
-    // Could use software pipelining. could be restructured to prefetch next element while current one is computing.
-    for (int column = 0; column < 2 * ORDER; column++) {
-        // shifing vs multiplying: shifting is done because its faster in fixed-point arithmetic.
-        augmented_matrix[row][column] = (augmented_matrix[row][column] << SHIFT_AMOUNT) / pivot_val;
+    int32_t temp[2 * ORDER];
+
+    // Load, shift left
+    for (int col = 0; col < 2 * ORDER; col += 4) {
+        int32x4_t vec = vld1q_s32(&augmented_matrix[row][col]);
+        vec = vshlq_n_s32(vec, SHIFT_AMOUNT);
+        vst1q_s32(&temp[col], vec);  // Store to temp buffer
+    }
+
+    // Scalar divide
+    for (int col = 0; col < 2 * ORDER; col++) {
+        augmented_matrix[row][col] = temp[col] / pivot_val;
     }
 }
+
 
 // ---- Step 5: Eliminate other rows using the pivot row ---- //
 // This function eliminates the values in the current column for all other rows using the pivot row.
 // It subtracts the appropriate multiple of the pivot row from each other row.
 void eliminate_other_rows(int pivot_row, int pivot_col) {
-    // access the rows linearly, which is good for avoiding cache misses.
     for (int row = 0; row < ORDER; row++) {
         if (row == pivot_row) continue;
+
         int factor = augmented_matrix[row][pivot_col];
-        for (int column = 0; column < 2 * ORDER; column++) {
-            // this for loop performs the same operation across a row - ideal for SIMD vectorization.
-            augmented_matrix[row][column] -= (factor * augmented_matrix[pivot_row][column]) >> SHIFT_AMOUNT;
+
+        int col = 0;
+
+        // Vectorized part — handles chunks of 4
+        for (; col <= 2 * ORDER - 4; col += 4) {
+            int32x4_t pivot_vals = vld1q_s32(&augmented_matrix[pivot_row][col]);
+            int32x4_t row_vals = vld1q_s32(&augmented_matrix[row][col]);
+
+            int32x4_t scaled = vmulq_n_s32(pivot_vals, factor);
+            int32x4_t shifted = vshrq_n_s32(scaled, SHIFT_AMOUNT);
+            int32x4_t result = vsubq_s32(row_vals, shifted);
+
+            vst1q_s32(&augmented_matrix[row][col], result);
+        }
+
+        // Scalar fallback for remaining columns - some rows above get neglected because vecorized loop doenst work for all columns (groups of 4)
+        for (; col < 2 * ORDER; col++) {
+            augmented_matrix[row][col] -= (factor * augmented_matrix[pivot_row][col]) >> SHIFT_AMOUNT;
         }
     }
 }
+
 
 void gauss_jordan_fixed_point() {
     for (int column = 0; column < ORDER; column++) {
