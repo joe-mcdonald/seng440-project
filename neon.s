@@ -1,4 +1,4 @@
-	.cpu cortex-a9
+	.cpu cortex-a15
 	.eabi_attribute 28, 1
 	.eabi_attribute 20, 1
 	.eabi_attribute 21, 1
@@ -9,11 +9,11 @@
 	.eabi_attribute 30, 2
 	.eabi_attribute 34, 1
 	.eabi_attribute 18, 4
-	.file	"matrix_inversion.c"
+	.file	"matrix_inversion_neon.c"
 	.text
 	.align	2
 	.global	print_matrix_float
-	.arch armv7-a
+	.arch armv7ve
 	.syntax unified
 	.arm
 	.fpu neon
@@ -21,12 +21,15 @@
 print_matrix_float:
 	@ args = 0, pretend = 0, frame = 0
 	@ frame_needed = 0, uses_anonymous_args = 0
-	push	{r4, r5, r6, r7, r8, lr}
-	movw	r7, #:lower16:.LC1
-	ldr	r6, .L8+4
+	strd	r4, [sp, #-24]!
 	movw	r0, #:lower16:.LC0
-	movt	r7, #:upper16:.LC1
+	strd	r6, [sp, #8]
+	ldr	r6, .L8+4
+	movw	r7, #:lower16:.LC1
+	str	r8, [sp, #16]
 	movt	r0, #:upper16:.LC0
+	movt	r7, #:upper16:.LC1
+	str	lr, [sp, #20]
 	vpush.64	{d8}
 	vldr.32	s16, .L8
 	add	r8, r6, #72
@@ -51,7 +54,11 @@ print_matrix_float:
 	cmp	r6, r8
 	bne	.L2
 	vldm	sp!, {d8}
-	pop	{r4, r5, r6, r7, r8, pc}
+	ldrd	r4, [sp]
+	ldrd	r6, [sp, #8]
+	ldr	r8, [sp, #16]
+	add	sp, sp, #20
+	ldr	pc, [sp], #4
 .L9:
 	.align	2
 .L8:
@@ -65,41 +72,58 @@ print_matrix_float:
 	.fpu neon
 	.type	augment_matrix, %function
 augment_matrix:
-	@ args = 0, pretend = 0, frame = 0
+	@ args = 0, pretend = 0, frame = 16
 	@ frame_needed = 0, uses_anonymous_args = 0
-	str	lr, [sp, #-4]!
-	movw	ip, #:lower16:.LANCHOR0
-	movw	lr, #:lower16:augmented_matrix
-	movt	ip, #:upper16:.LANCHOR0
-	movt	lr, #:upper16:augmented_matrix
-	mov	r0, #0
+	strd	r4, [sp, #-16]!
+	movw	r5, #:lower16:augmented_matrix
+	movw	r2, #:lower16:.LANCHOR0
+	movt	r5, #:upper16:augmented_matrix
+	mov	r1, #0
+	str	r6, [sp, #8]
+	mov	r3, r5
+	movt	r2, #:upper16:.LANCHOR0
+	str	lr, [sp, #12]
+	mov	r0, r1
+	sub	sp, sp, #16
+	mov	r6, #256
 .L11:
-	mov	r2, lr
-	mov	r3, #0
-	b	.L16
-.L19:
-	ldr	r1, [ip, r3, lsl #2]
-	lsl	r1, r1, #8
-	str	r1, [r2]
-.L13:
-	add	r3, r3, #1
-	add	r2, r2, #4
-.L16:
-	cmp	r3, #2
-	sub	r1, r3, #3
-	bls	.L19
-	cmp	r0, r1
-	moveq	r1, #256
-	movne	r1, #0
-	cmp	r3, #5
-	str	r1, [r2]
-	bne	.L13
-	add	r0, r0, #1
-	add	lr, lr, #24
-	cmp	r0, #3
-	add	ip, ip, #12
-	bne	.L11
+	ldm	r2, {r4, lr}
+	cmp	r1, #0
+	ldr	ip, [r2, #8]
+	stm	sp, {r4, lr}
+	str	ip, [sp, #8]
+	str	r0, [sp, #12]
+	vld1.32	{d16-d17}, [sp:64]
+	vshl.i32	q8, q8, #8
+	vst1.32	{d16-d17}, [r3]
+	beq	.L20
+	cmp	r1, #1
+	str	r0, [r3, #12]
+	beq	.L12
+	mov	r2, #256
+	str	r0, [r3, #16]
+	str	r2, [r5, #68]
+	add	sp, sp, #16
+	@ sp needed
+	ldrd	r4, [sp]
+	ldr	r6, [sp, #8]
+	add	sp, sp, #12
 	ldr	pc, [sp], #4
+.L20:
+	add	r2, r2, #12
+	add	r3, r3, #24
+	str	r6, [r3, #-12]
+	str	r1, [r3, #-8]
+	str	r1, [r3, #-4]
+	mov	r1, #1
+	b	.L11
+.L12:
+	add	r2, r2, #12
+	mov	r1, #2
+	str	r6, [r3, #16]
+	add	r3, r3, #24
+	str	r0, [r3, #-4]
+	b	.L11
 	.size	augment_matrix, .-augment_matrix
 	.align	2
 	.global	swap_rows
@@ -122,13 +146,13 @@ swap_rows:
 	add	r3, r3, r2
 	add	ip, ip, r0
 	sub	r1, r1, #4
-.L21:
+.L22:
 	ldr	r2, [r3, #4]!
 	ldr	r0, [r1, #4]!
 	cmp	r3, ip
 	str	r0, [r3]
 	str	r2, [r1]
-	bne	.L21
+	bne	.L22
 	bx	lr
 	.size	swap_rows, .-swap_rows
 	.align	2
@@ -143,7 +167,7 @@ find_pivot_row:
 	@ link register save eliminated.
 	add	r2, r0, #1
 	cmp	r2, #2
-	bxgt	lr
+	bgt	.L24
 	rsb	r3, r0, r0, lsl #3
 	movw	ip, #:lower16:augmented_matrix
 	movt	ip, #:upper16:augmented_matrix
@@ -162,9 +186,9 @@ find_pivot_row:
 	movgt	r1, r3
 	cmp	r2, #3
 	bne	.L27
+.L24:
 	bx	lr
 	.size	find_pivot_row, .-find_pivot_row
-	.global	__aeabi_idiv
 	.align	2
 	.global	normalize_row
 	.syntax unified
@@ -172,27 +196,36 @@ find_pivot_row:
 	.fpu neon
 	.type	normalize_row, %function
 normalize_row:
-	@ args = 0, pretend = 0, frame = 0
+	@ args = 0, pretend = 0, frame = 24
 	@ frame_needed = 0, uses_anonymous_args = 0
+	@ link register save eliminated.
 	add	r0, r0, r0, lsl #1
-	movw	r3, #:lower16:augmented_matrix
-	movt	r3, #:upper16:augmented_matrix
-	lsl	r0, r0, #3
-	push	{r4, r5, r6, lr}
-	add	r5, r3, #20
-	sub	r4, r0, #4
-	mov	r6, r1
-	add	r5, r5, r0
-	add	r4, r4, r3
+	movw	r2, #:lower16:augmented_matrix
+	movt	r2, #:upper16:augmented_matrix
+	lsl	r3, r0, #3
+	add	r0, r2, #16
+	sub	sp, sp, #24
+	add	r0, r3, r0
+	add	r3, r3, r2
+	add	ip, sp, #24
+	mov	r2, sp
+	vld1.32	{d18-d19}, [r0]
+	sub	r0, r3, #4
+	vld1.32	{d16-d17}, [r3]
+	add	r3, sp, #16
+	vshl.i32	q9, q9, #8
+	vshl.i32	q8, q8, #8
+	vst1.32	{d18-d19}, [r3:64]
+	vst1.32	{d16-d17}, [sp:64]
 .L31:
-	ldr	r0, [r4, #4]!
-	mov	r1, r6
-	lsl	r0, r0, #8
-	bl	__aeabi_idiv
-	cmp	r4, r5
-	str	r0, [r4]
+	ldr	r3, [r2], #4
+	sdiv	r3, r3, r1
+	cmp	r2, ip
+	str	r3, [r0, #4]!
 	bne	.L31
-	pop	{r4, r5, r6, pc}
+	add	sp, sp, #24
+	@ sp needed
+	bx	lr
 	.size	normalize_row, .-normalize_row
 	.align	2
 	.global	eliminate_other_rows
@@ -201,38 +234,63 @@ normalize_row:
 	.fpu neon
 	.type	eliminate_other_rows, %function
 eliminate_other_rows:
-	@ args = 0, pretend = 0, frame = 0
+	@ args = 0, pretend = 0, frame = 24
 	@ frame_needed = 0, uses_anonymous_args = 0
-	push	{r4, r5, r6, r7, lr}
+	strd	r4, [sp, #-16]!
+	lsl	r5, r0, #1
+	str	r6, [sp, #8]
+	add	r2, r5, r0
+	str	lr, [sp, #12]
+	movw	lr, #:lower16:augmented_matrix
+	lsl	r2, r2, #3
+	sub	sp, sp, #24
+	movt	lr, #:upper16:augmented_matrix
+	sub	r2, r2, #4
+	mov	r3, sp
+	add	r4, sp, #24
+	add	r2, lr, r2
+.L35:
+	ldr	ip, [r2, #4]!
+	str	ip, [r3], #4
+	cmp	r4, r3
+	bne	.L35
+	add	r5, r5, r0
 	movw	r3, #:lower16:augmented_matrix
-	add	r7, r0, r0, lsl #1
+	add	lr, lr, r5, lsl #3
 	movt	r3, #:upper16:augmented_matrix
-	lsl	r1, r1, #2
-	add	r4, r3, #20
-	add	r3, r3, r7, lsl #3
-	mov	r5, #0
-	sub	r1, r1, #20
-	sub	r7, r3, #4
-.L38:
-	cmp	r0, r5
-	beq	.L36
-	ldr	r6, [r1, r4]
-	sub	r3, r4, #24
-	mov	lr, r7
+	mov	r2, #0
 .L37:
-	ldr	ip, [lr, #4]!
-	ldr	r2, [r3, #4]!
-	mul	ip, ip, r6
-	cmp	r3, r4
-	sub	r2, r2, ip, asr #8
-	str	r2, [r3]
-	bne	.L37
+	cmp	r0, r2
+	add	r2, r2, #1
+	beq	.L36
+	ldr	r5, [r3, r1, lsl #2]
+	vld1.32	{d16-d17}, [sp:64]
+	vld1.32	{d18-d19}, [r3]
+	ldr	r4, [r3, #16]
+	vmov.32	d7[0], r5
+	ldr	ip, [r3, #20]
+	vmul.i32	q8, q8, d7[0]
+	vshr.s32	q8, q8, #8
+	vsub.i32	q8, q9, q8
+	vst1.32	{d16-d17}, [r3]
+	ldr	r6, [lr, #16]
+	mul	r6, r6, r5
+	sub	r4, r4, r6, asr #8
+	str	r4, [r3, #16]
+	ldr	r4, [lr, #20]
+	mul	r4, r4, r5
+	sub	ip, ip, r4, asr #8
+	str	ip, [r3, #20]
 .L36:
-	add	r5, r5, #1
-	add	r4, r4, #24
-	cmp	r5, #3
-	bne	.L38
-	pop	{r4, r5, r6, r7, pc}
+	cmp	r2, #3
+	add	r3, r3, #24
+	bne	.L37
+	add	sp, sp, #24
+	@ sp needed
+	ldrd	r4, [sp]
+	ldr	r6, [sp, #8]
+	add	sp, sp, #12
+	ldr	pc, [sp], #4
 	.size	eliminate_other_rows, .-eliminate_other_rows
 	.align	2
 	.global	gauss_jordan_fixed_point
@@ -241,102 +299,89 @@ eliminate_other_rows:
 	.fpu neon
 	.type	gauss_jordan_fixed_point, %function
 gauss_jordan_fixed_point:
-	@ args = 0, pretend = 0, frame = 8
+	@ args = 0, pretend = 0, frame = 24
 	@ frame_needed = 0, uses_anonymous_args = 0
-	movw	r3, #:lower16:augmented_matrix
-	push	{r4, r5, r6, r7, r8, r9, r10, fp, lr}
-	movt	r3, #:upper16:augmented_matrix
-	mov	r5, #0
-	mov	r2, r5
-	mov	r8, r3
-	add	r4, r3, #20
-	sub	r6, r3, #4
-	mvn	r9, #19
-	sub	sp, sp, #12
-	str	r3, [sp, #4]
-.L54:
-	ldr	fp, [r8]
-	add	r7, r2, #1
+	strd	r4, [sp, #-28]!
+	movw	r4, #:lower16:augmented_matrix
+	mov	r1, #0
+	movt	r4, #:upper16:augmented_matrix
+	strd	r6, [sp, #8]
+	mov	r5, r4
+	sub	r4, r4, #4
+	strd	r8, [sp, #16]
+	add	r6, r5, #20
+	mov	r8, r5
+	str	lr, [sp, #24]
+	sub	sp, sp, #28
+.L47:
+	add	r7, r1, #1
+	ldr	ip, [r8]
 	cmp	r7, #3
-	eor	r1, fp, fp, asr #31
-	sub	r1, r1, fp, asr #31
-	beq	.L44
-	mov	ip, r8
+	beq	.L42
+	eor	lr, ip, ip, asr #31
+	mov	r9, r8
+	mov	r2, r1
+	sub	lr, lr, ip, asr #31
 	mov	r0, r7
-.L46:
-	ldr	r3, [ip, #24]!
+.L44:
+	ldr	r3, [r9, #24]!
 	cmp	r3, #0
 	rsblt	r3, r3, #0
-	cmp	r3, r1
+	cmp	r3, lr
 	movgt	r2, r0
-	movgt	r1, r3
+	movgt	lr, r3
 	cmp	r0, #2
 	mov	r0, #2
-	bne	.L46
-	cmp	r2, r5
-	beq	.L44
+	bne	.L44
+	cmp	r2, r1
+	beq	.L42
 	add	r3, r2, r2, lsl #1
-	ldr	r0, .L66
-	mov	r1, r6
+	mov	r0, r4
 	lsl	r3, r3, #3
 	sub	r2, r3, #4
-	add	r3, r3, r0
-	ldr	r0, [sp, #4]
-	add	r2, r0, r2
-.L47:
-	ldr	r0, [r2, #4]!
-	ldr	ip, [r1, #4]!
+	add	r3, r6, r3
+	add	r2, r5, r2
+.L45:
+	ldr	ip, [r2, #4]!
+	ldr	lr, [r0, #4]!
 	cmp	r2, r3
-	str	ip, [r2]
-	str	r0, [r1]
-	bne	.L47
-	ldr	fp, [r8]
-.L44:
-	mov	r10, r6
-.L48:
-	ldr	r0, [r10, #4]!
-	mov	r1, fp
-	lsl	r0, r0, #8
-	bl	__aeabi_idiv
-	cmp	r10, r4
-	str	r0, [r10]
-	bne	.L48
-	ldr	r0, .L66
-	mov	ip, #0
-.L50:
-	cmp	ip, r5
-	beq	.L53
-	ldr	r10, [r9, r0]
-	sub	r3, r0, #24
-	mov	lr, r6
-.L52:
-	ldr	r1, [lr, #4]!
-	ldr	r2, [r3, #4]!
-	mul	r1, r1, r10
-	cmp	r3, r0
-	sub	r2, r2, r1, asr #8
-	str	r2, [r3]
-	bne	.L52
-.L53:
-	add	ip, ip, #1
-	add	r0, r0, #24
-	cmp	ip, #3
-	bne	.L50
-	cmp	r7, #3
-	add	r5, r5, #1
+	str	lr, [r2]
+	str	ip, [r0]
+	bne	.L45
+	ldr	ip, [r8]
+.L42:
+	add	r0, r4, #4
+	add	r3, r4, #20
+	mov	r2, sp
+	add	lr, sp, #24
+	vld1.32	{d18-d19}, [r0]
+	mov	r0, r4
+	vld1.32	{d16-d17}, [r3]
+	add	r3, sp, #16
+	vshl.i32	q9, q9, #8
+	vshl.i32	q8, q8, #8
+	vst1.32	{d18-d19}, [sp:64]
+	vst1.32	{d16-d17}, [r3:64]
+.L46:
+	ldr	r3, [r2], #4
+	sdiv	r3, r3, ip
+	cmp	r2, lr
+	str	r3, [r0, #4]!
+	bne	.L46
+	mov	r0, r1
 	add	r8, r8, #28
-	add	r6, r6, #24
-	add	r9, r9, #4
+	bl	eliminate_other_rows
+	cmp	r7, #3
 	add	r4, r4, #24
-	mov	r2, r7
-	bne	.L54
-	add	sp, sp, #12
+	mov	r1, r7
+	bne	.L47
+	add	sp, sp, #28
 	@ sp needed
-	pop	{r4, r5, r6, r7, r8, r9, r10, fp, pc}
-.L67:
-	.align	2
-.L66:
-	.word	augmented_matrix+20
+	ldrd	r4, [sp]
+	ldrd	r6, [sp, #8]
+	ldrd	r8, [sp, #16]
+	add	sp, sp, #24
+	ldr	pc, [sp], #4
 	.size	gauss_jordan_fixed_point, .-gauss_jordan_fixed_point
 	.align	2
 	.global	estimate_condition_number
@@ -347,25 +392,25 @@ gauss_jordan_fixed_point:
 estimate_condition_number:
 	@ args = 0, pretend = 0, frame = 0
 	@ frame_needed = 0, uses_anonymous_args = 0
-	str	lr, [sp, #-4]!
 	add	ip, r0, #8
-	mov	lr, #0
 	add	r0, r0, #44
-.L69:
+	str	lr, [sp, #-4]!
+	mov	lr, #0
+.L57:
 	sub	r3, ip, #12
 	mov	r1, #0
-.L72:
+.L60:
 	ldr	r2, [r3, #4]!
 	cmp	r2, #0
 	sublt	r1, r1, r2
 	addge	r1, r1, r2
 	cmp	r3, ip
-	bne	.L72
+	bne	.L60
 	cmp	lr, r1
 	add	ip, r3, #12
 	movlt	lr, r1
 	cmp	ip, r0
-	bne	.L69
+	bne	.L57
 	mov	r0, lr
 	ldr	pc, [sp], #4
 	.size	estimate_condition_number, .-estimate_condition_number
@@ -379,105 +424,81 @@ estimate_condition_number:
 main:
 	@ args = 0, pretend = 0, frame = 0
 	@ frame_needed = 0, uses_anonymous_args = 0
-	push	{r4, r5, r6, r7, r8, lr}
 	movw	r0, #:lower16:.LC2
+	strd	r4, [sp, #-16]!
 	movw	r4, #:lower16:.LANCHOR0
-	movt	r0, #:upper16:.LC2
 	movt	r4, #:upper16:.LANCHOR0
+	movt	r0, #:upper16:.LC2
+	str	r6, [sp, #8]
+	str	lr, [sp, #12]
 	bl	puts
 	add	r0, r4, #8
 	add	lr, r4, #44
 	mov	ip, #0
-.L77:
+.L65:
 	sub	r3, r0, #12
 	mov	r1, #0
-.L80:
+.L68:
 	ldr	r2, [r3, #4]!
 	cmp	r2, #0
 	sublt	r1, r1, r2
 	addge	r1, r1, r2
 	cmp	r3, r0
-	bne	.L80
+	bne	.L68
 	cmp	ip, r1
 	add	r0, r3, #12
 	movlt	ip, r1
 	cmp	r0, lr
-	bne	.L77
+	bne	.L65
 	vmov	s15, ip	@ int
 	movw	r0, #:lower16:.LC3
-	ldr	r7, .L94+8
-	movw	r6, #:lower16:.LC4
-	vcvt.f32.s32	s15, s15
+	movw	r5, #:lower16:.LC4
 	movt	r0, #:upper16:.LC3
-	movt	r6, #:upper16:.LC4
-	sub	r5, r7, #36
+	ldr	r6, .L74+8
+	movt	r5, #:upper16:.LC4
+	vcvt.f32.s32	s15, s15
 	vcvt.f64.f32	d16, s15
 	vmov	r2, r3, d16
 	bl	printf
-.L82:
-	ldr	r1, [r5]
-	mov	r0, r6
+.L70:
+	mov	r0, r5
+	ldr	r1, [r4]
+	add	r4, r4, #12
 	bl	printf
-	ldr	r1, [r5, #4]
-	mov	r0, r6
+	mov	r0, r5
+	ldr	r1, [r4, #-8]
 	bl	printf
-	ldr	r1, [r5, #8]
-	mov	r0, r6
+	mov	r0, r5
+	ldr	r1, [r4, #-4]
 	bl	printf
-	add	r5, r5, #12
 	mov	r0, #10
 	bl	putchar
-	cmp	r5, r7
-	bne	.L82
+	cmp	r4, r6
+	bne	.L70
 	bl	clock
-	movw	ip, #:lower16:augmented_matrix
 	mov	r5, r0
-	movt	ip, #:upper16:augmented_matrix
-	mov	r0, #0
-.L83:
-	mov	r2, ip
-	mov	r3, #0
-	b	.L88
-.L93:
-	ldr	r1, [r4, r3, lsl #2]
-	lsl	r1, r1, #8
-	str	r1, [r2]
-.L85:
-	add	r3, r3, #1
-	add	r2, r2, #4
-.L88:
-	cmp	r3, #2
-	sub	r1, r3, #3
-	bls	.L93
-	cmp	r1, r0
-	moveq	r1, #256
-	movne	r1, #0
-	cmp	r3, #5
-	str	r1, [r2]
-	bne	.L85
-	add	r0, r0, #1
-	add	ip, ip, #24
-	cmp	r0, #3
-	add	r4, r4, #12
-	bne	.L83
+	bl	augment_matrix
 	bl	gauss_jordan_fixed_point
 	bl	clock
 	mov	r4, r0
 	sub	r4, r4, r5
 	bl	print_matrix_float
 	vmov	s15, r4	@ int
+	vldr.64	d17, .L74
 	movw	r0, #:lower16:.LC5
-	vldr.64	d17, .L94
 	movt	r0, #:upper16:.LC5
 	vcvt.f64.s32	d16, s15
 	vdiv.f64	d16, d16, d17
 	vmov	r2, r3, d16
 	bl	printf
+	ldrd	r4, [sp]
 	mov	r0, #0
-	pop	{r4, r5, r6, r7, r8, pc}
-.L95:
+	ldr	r6, [sp, #8]
+	add	sp, sp, #12
+	ldr	pc, [sp], #4
+.L75:
 	.align	3
-.L94:
+.L74:
 	.word	0
 	.word	1093567616
 	.word	.LANCHOR0+36

@@ -25,30 +25,29 @@ print_matrix_float:
 	push	{r4, r5, r6, r7, r8, lr}
 	movt	r0, #:upper16:.LC0
 	vpush.64	{d8}
-	movw	r7, #:lower16:.LC1
+	movw	r6, #:lower16:.LC1
 	bl	puts
 	vldr.32	s16, .L8
-	ldr	r6, .L8+4
-	movt	r7, #:upper16:.LC1
-	add	r8, r6, #72
+	ldr	r5, .L8+4
+	movt	r6, #:upper16:.LC1
+	add	r7, r5, #2048
 .L2:
-	mov	r5, r6
-	mov	r4, #3
+	sub	r4, r5, #64
 .L3:
-	vldmia.32	r5!, {s15}	@ int
+	ldr	r3, [r4, #4]!
+	mov	r0, r6
+	vmov	s15, r3	@ int
 	vcvt.f32.s32	s15, s15
 	vmul.f32	s15, s15, s16
 	vcvt.f64.f32	d7, s15
-	add	r4, r4, #1
-	mov	r0, r7
 	vmov	r2, r3, d7
 	bl	printf
-	cmp	r4, #6
+	cmp	r4, r5
 	bne	.L3
-	add	r6, r6, #24
+	add	r5, r4, #128
 	mov	r0, #10
 	bl	putchar
-	cmp	r6, r8
+	cmp	r5, r7
 	bne	.L2
 	vldm	sp!, {d8}
 	pop	{r4, r5, r6, r7, r8, pc}
@@ -56,7 +55,7 @@ print_matrix_float:
 	.align	2
 .L8:
 	.word	998244352
-	.word	augmented_matrix+12
+	.word	augmented_matrix+124
 	.size	print_matrix_float, .-print_matrix_float
 	.align	2
 	.global	augment_matrix
@@ -67,37 +66,36 @@ print_matrix_float:
 augment_matrix:
 	@ args = 0, pretend = 0, frame = 0
 	@ frame_needed = 0, uses_anonymous_args = 0
+	movw	r1, #:lower16:augmented_matrix
+	movw	r0, #:lower16:.LANCHOR0
+	mov	ip, #0
+	movt	r1, #:upper16:augmented_matrix
 	str	lr, [sp, #-4]!
-	movw	ip, #:lower16:.LANCHOR0
-	movw	lr, #:lower16:augmented_matrix
-	mov	r0, #0
-	movt	lr, #:upper16:augmented_matrix
-	movt	ip, #:upper16:.LANCHOR0
+	movt	r0, #:upper16:.LANCHOR0
+	add	lr, r1, #2048
 .L11:
-	mov	r2, lr
 	mov	r3, #0
 	b	.L16
 .L19:
-	ldr	r1, [ip, r3, lsl #2]
-	lsl	r1, r1, #8
-	str	r1, [r2]
+	ldr	r2, [r0, r3, lsl #2]
+	lsl	r2, r2, #8
+	str	r2, [r1, r3, lsl #2]
 .L13:
 	add	r3, r3, #1
-	add	r2, r2, #4
 .L16:
-	cmp	r3, #2
-	sub	r1, r3, #3
+	cmp	r3, #15
+	sub	r2, r3, #16
 	bls	.L19
-	cmp	r0, r1
-	moveq	r1, #256
-	movne	r1, #0
-	cmp	r3, #5
-	str	r1, [r2]
+	cmp	ip, r2
+	moveq	r2, #256
+	movne	r2, #0
+	cmp	r3, #31
+	str	r2, [r1, r3, lsl #2]
 	bne	.L13
-	add	r0, r0, #1
-	cmp	r0, #3
-	add	lr, lr, #24
-	add	ip, ip, #12
+	add	r1, r1, #128
+	cmp	r1, lr
+	add	ip, ip, #1
+	add	r0, r0, #64
 	bne	.L11
 	ldr	pc, [sp], #4
 	.size	augment_matrix, .-augment_matrix
@@ -111,21 +109,21 @@ swap_rows:
 	@ args = 0, pretend = 0, frame = 0
 	@ frame_needed = 0, uses_anonymous_args = 0
 	@ link register save eliminated.
-	movw	r3, #:lower16:augmented_matrix
-	add	r0, r0, r0, lsl #1
-	movt	r3, #:upper16:augmented_matrix
-	lsl	r0, r0, #3
-	add	r1, r1, r1, lsl #1
-	add	ip, r3, #24
+	movw	r2, #:lower16:augmented_matrix
+	lsl	r0, r0, #7
+	movt	r2, #:upper16:augmented_matrix
+	add	r1, r2, r1, lsl #7
+	add	ip, r2, #124
+	sub	r3, r0, #4
+	sub	r1, r1, #4
 	add	ip, ip, r0
-	add	r1, r3, r1, lsl #3
-	add	r0, r0, r3
+	add	r3, r3, r2
 .L21:
-	ldr	r2, [r1]
-	ldr	r3, [r0]
-	str	r2, [r0], #4
-	cmp	r0, ip
-	str	r3, [r1], #4
+	ldr	r2, [r3, #4]!
+	ldr	r0, [r1, #4]!
+	cmp	r3, ip
+	str	r0, [r3]
+	str	r2, [r1]
 	bne	.L21
 	bx	lr
 	.size	swap_rows, .-swap_rows
@@ -139,27 +137,29 @@ find_pivot_row:
 	@ args = 0, pretend = 0, frame = 0
 	@ frame_needed = 0, uses_anonymous_args = 0
 	@ link register save eliminated.
-	add	r2, r0, #1
-	cmp	r2, #2
-	bxgt	lr
-	movw	ip, #:lower16:augmented_matrix
-	rsb	r3, r0, r0, lsl #3
-	movt	ip, #:upper16:augmented_matrix
-	lsl	r3, r3, #2
-	ldr	r1, [ip, r3]
-	add	ip, ip, r3
+	movw	r2, #:lower16:augmented_matrix
+	add	r3, r0, r0, lsl #5
+	movt	r2, #:upper16:augmented_matrix
+	ldr	r1, [r2, r3, lsl #2]
+	add	r3, r0, #1
 	cmp	r1, #0
 	rsblt	r1, r1, #0
+	cmp	r3, #15
+	mov	ip, r0
+	bgt	.L24
+	add	r0, r2, r0, lsl #2
 .L27:
-	ldr	r3, [ip, #24]!
-	cmp	r3, #0
-	rsblt	r3, r3, #0
-	cmp	r3, r1
-	movgt	r0, r2
-	add	r2, r2, #1
-	movgt	r1, r3
-	cmp	r2, #3
+	ldr	r2, [r0, r3, lsl #7]
+	cmp	r2, #0
+	rsblt	r2, r2, #0
+	cmp	r2, r1
+	movgt	ip, r3
+	add	r3, r3, #1
+	movgt	r1, r2
+	cmp	r3, #16
 	bne	.L27
+.L24:
+	mov	r0, ip
 	bx	lr
 	.size	find_pivot_row, .-find_pivot_row
 	.global	__aeabi_idiv
@@ -175,19 +175,19 @@ normalize_row:
 	movw	r3, #:lower16:augmented_matrix
 	push	{r4, r5, r6, lr}
 	mov	r6, r1
+	lsl	r0, r0, #7
 	movt	r3, #:upper16:augmented_matrix
-	add	r0, r0, r0, lsl #1
-	lsl	r4, r0, #3
-	add	r5, r3, #24
-	add	r5, r5, r4
+	add	r5, r3, #124
+	sub	r4, r0, #4
+	add	r5, r5, r0
 	add	r4, r4, r3
 .L31:
-	ldr	r0, [r4]
+	ldr	r0, [r4, #4]!
 	mov	r1, r6
 	lsl	r0, r0, #8
 	bl	__aeabi_idiv
-	str	r0, [r4], #4
 	cmp	r4, r5
+	str	r0, [r4]
 	bne	.L31
 	pop	{r4, r5, r6, pc}
 	.size	normalize_row, .-normalize_row
@@ -201,32 +201,31 @@ eliminate_other_rows:
 	@ args = 0, pretend = 0, frame = 0
 	@ frame_needed = 0, uses_anonymous_args = 0
 	push	{r4, r5, r6, r7, lr}
-	movw	lr, #:lower16:augmented_matrix
-	mov	r5, #0
-	movt	lr, #:upper16:augmented_matrix
-	lsl	r1, r1, #2
-	add	r7, r0, r0, lsl #1
-	add	r7, lr, r7, lsl #3
-	sub	r1, r1, #24
-	add	lr, lr, #24
+	movw	r4, #:lower16:augmented_matrix
+	mov	r6, #0
+	movt	r4, #:upper16:augmented_matrix
+	add	r7, r4, r0, lsl #7
+	add	r1, r4, r1, lsl #2
+	sub	r7, r7, #4
+	add	r4, r4, #124
 .L38:
-	cmp	r0, r5
+	cmp	r0, r6
 	beq	.L36
-	mov	r4, r7
-	ldr	r6, [r1, lr]
-	sub	r3, lr, #24
+	mov	lr, r7
+	ldr	r5, [r1, r6, lsl #7]
+	sub	r3, r4, #128
 .L37:
-	ldr	ip, [r4], #4
-	ldr	r2, [r3]
-	mul	ip, r6, ip
+	ldr	ip, [lr, #4]!
+	ldr	r2, [r3, #4]!
+	mul	ip, ip, r5
+	cmp	r3, r4
 	sub	r2, r2, ip, asr #8
-	str	r2, [r3], #4
-	cmp	r3, lr
+	str	r2, [r3]
 	bne	.L37
 .L36:
-	add	r5, r5, #1
-	cmp	r5, #3
-	add	lr, lr, #24
+	add	r6, r6, #1
+	cmp	r6, #16
+	add	r4, r4, #128
 	bne	.L38
 	pop	{r4, r5, r6, r7, pc}
 	.size	eliminate_other_rows, .-eliminate_other_rows
@@ -240,95 +239,95 @@ gauss_jordan_fixed_point:
 	@ args = 0, pretend = 0, frame = 0
 	@ frame_needed = 0, uses_anonymous_args = 0
 	push	{r3, r4, r5, r6, r7, r8, r9, r10, fp, lr}
-	movw	r7, #:lower16:augmented_matrix
+	movw	r8, #:lower16:augmented_matrix
 	mov	r6, #0
-	movt	r7, #:upper16:augmented_matrix
-	mov	r8, r7
-	mov	r2, r6
-	mvn	r10, #23
-	add	r5, r7, #24
+	movt	r8, #:upper16:augmented_matrix
+	mov	r5, r8
+	mov	r1, r6
+	add	r4, r8, #124
+	sub	r7, r8, #4
 .L54:
-	ldr	fp, [r7]
-	add	r4, r2, #1
-	eor	r1, fp, fp, asr #31
-	cmp	r4, #3
-	sub	r1, r1, fp, asr #31
+	ldr	fp, [r8]
+	add	r9, r1, #1
+	eor	r0, fp, fp, asr #31
+	cmp	r9, #16
+	sub	r0, r0, fp, asr #31
 	beq	.L44
-	mov	ip, r7
-	mov	r0, r4
+	mov	r3, r9
 .L46:
-	ldr	r3, [ip, #24]!
-	cmp	r3, #0
-	rsblt	r3, r3, #0
-	cmp	r3, r1
+	ldr	r2, [r5, r3, lsl #7]
+	cmp	r2, #0
+	rsblt	r2, r2, #0
+	cmp	r2, r0
 	movgt	r1, r3
-	movgt	r2, r0
-	cmp	r0, #2
-	movne	r0, #2
+	add	r3, r3, #1
+	movgt	r0, r2
+	cmp	r3, #16
 	bne	.L46
-.L67:
-	cmp	r2, r6
-	beq	.L44
-	add	r3, r2, r2, lsl #1
-	movw	r2, #:lower16:augmented_matrix
-	mov	r1, r8
-	ldr	r0, .L68
-	lsl	r3, r3, #3
-	movt	r2, #:upper16:augmented_matrix
-	add	r2, r2, r3
-	add	r3, r3, r0
-.L47:
-	ldr	ip, [r1]
-	ldr	r0, [r2]
-	str	ip, [r2], #4
-	cmp	r2, r3
-	str	r0, [r1], #4
-	bne	.L47
-	ldr	fp, [r7]
+	cmp	r1, r6
+	bne	.L67
 .L44:
-	mov	r9, r8
+	mov	r10, r7
 .L48:
-	ldr	r0, [r9]
+	ldr	r0, [r10, #4]!
 	mov	r1, fp
 	lsl	r0, r0, #8
 	bl	__aeabi_idiv
-	str	r0, [r9], #4
-	cmp	r9, r5
+	cmp	r10, r4
+	str	r0, [r10]
 	bne	.L48
-	mov	lr, #0
+	mov	r10, #0
 	ldr	ip, .L68
 .L50:
-	cmp	lr, r6
+	cmp	r10, r6
 	beq	.L53
-	mov	r0, r8
-	ldr	r9, [r10, ip]
-	sub	r3, ip, #24
+	mov	r0, r7
+	ldr	lr, [r5, r10, lsl #7]
+	sub	r3, ip, #128
 .L52:
-	ldr	r1, [r0], #4
-	ldr	r2, [r3]
-	mul	r1, r1, r9
-	sub	r2, r2, r1, asr #8
-	str	r2, [r3], #4
+	ldr	r1, [r0, #4]!
+	ldr	r2, [r3, #4]!
+	mul	r1, r1, lr
 	cmp	r3, ip
+	sub	r2, r2, r1, asr #8
+	str	r2, [r3]
 	bne	.L52
 .L53:
-	add	lr, lr, #1
-	cmp	lr, #3
-	add	ip, ip, #24
+	add	r10, r10, #1
+	cmp	r10, #16
+	add	ip, ip, #128
 	bne	.L50
-	cmp	r4, #3
+	cmp	r9, #16
 	add	r6, r6, #1
-	add	r7, r7, #28
-	add	r8, r8, #24
-	add	r10, r10, #4
-	add	r5, r5, #24
-	mov	r2, r4
+	add	r8, r8, #132
+	add	r7, r7, #128
+	add	r5, r5, #4
+	add	r4, r4, #128
+	mov	r1, r9
 	bne	.L54
 	pop	{r3, r4, r5, r6, r7, r8, r9, r10, fp, pc}
+.L67:
+	movw	r0, #:lower16:augmented_matrix
+	mov	r2, r7
+	lsl	r1, r1, #7
+	sub	r3, r1, #4
+	movt	r0, #:upper16:augmented_matrix
+	add	r3, r0, r3
+	add	r0, r0, #124
+	add	r1, r1, r0
+.L47:
+	ldr	r0, [r3, #4]!
+	ldr	ip, [r2, #4]!
+	cmp	r3, r1
+	str	ip, [r3]
+	str	r0, [r2]
+	bne	.L47
+	ldr	fp, [r8]
+	b	.L44
 .L69:
 	.align	2
 .L68:
-	.word	augmented_matrix+24
+	.word	augmented_matrix+124
 	.size	gauss_jordan_fixed_point, .-gauss_jordan_fixed_point
 	.align	2
 	.global	estimate_condition_number
@@ -340,12 +339,13 @@ estimate_condition_number:
 	@ args = 0, pretend = 0, frame = 0
 	@ frame_needed = 0, uses_anonymous_args = 0
 	str	lr, [sp, #-4]!
-	mov	lr, #0
-	add	ip, r0, #8
-	add	r0, r0, #44
+	add	ip, r0, #60
+	add	lr, r0, #1072
+	mov	r0, #0
+	add	lr, lr, #12
 .L71:
 	mov	r1, #0
-	sub	r3, ip, #12
+	sub	r3, ip, #64
 .L74:
 	ldr	r2, [r3, #4]!
 	cmp	r2, #0
@@ -353,12 +353,11 @@ estimate_condition_number:
 	addge	r1, r1, r2
 	cmp	r3, ip
 	bne	.L74
-	cmp	lr, r1
-	add	ip, r3, #12
-	movlt	lr, r1
-	cmp	ip, r0
+	cmp	r0, r1
+	add	ip, r3, #64
+	movlt	r0, r1
+	cmp	ip, lr
 	bne	.L71
-	mov	r0, lr
 	ldr	pc, [sp], #4
 	.size	estimate_condition_number, .-estimate_condition_number
 	.section	.text.startup,"ax",%progbits
@@ -373,16 +372,16 @@ main:
 	@ frame_needed = 0, uses_anonymous_args = 0
 	movw	r0, #:lower16:.LC2
 	push	{r4, r5, r6, r7, r8, lr}
-	movw	r4, #:lower16:.LANCHOR0
+	movw	r5, #:lower16:.LANCHOR0
 	movt	r0, #:upper16:.LC2
 	bl	puts
 	mov	ip, #0
-	movt	r4, #:upper16:.LANCHOR0
-	add	r0, r4, #8
-	add	lr, r4, #44
+	movt	r5, #:upper16:.LANCHOR0
+	add	r0, r5, #60
+	add	lr, r0, #1024
 .L79:
 	mov	r1, #0
-	sub	r3, r0, #12
+	sub	r3, r0, #64
 .L82:
 	ldr	r2, [r3, #4]!
 	cmp	r2, #0
@@ -391,7 +390,7 @@ main:
 	cmp	r3, r0
 	bne	.L82
 	cmp	ip, r1
-	add	r0, r3, #12
+	add	r0, r3, #64
 	movlt	ip, r1
 	cmp	r0, lr
 	bne	.L79
@@ -399,66 +398,63 @@ main:
 	vcvt.f32.s32	s15, s15
 	movw	r0, #:lower16:.LC3
 	vcvt.f64.f32	d7, s15
-	movt	r0, #:upper16:.LC3
+	movw	r7, #:lower16:.LC4
 	vmov	r2, r3, d7
-	movw	r6, #:lower16:.LC4
+	movt	r0, #:upper16:.LC3
 	bl	printf
-	ldr	r7, .L96+8
-	movt	r6, #:upper16:.LC4
-	sub	r5, r7, #36
+	ldr	r6, .L98+8
+	movt	r7, #:upper16:.LC4
+	add	r8, r6, #1024
 .L84:
-	ldr	r1, [r5]
-	mov	r0, r6
+	sub	r4, r6, #64
+.L85:
+	ldr	r1, [r4], #4
+	mov	r0, r7
 	bl	printf
-	ldr	r1, [r5, #4]
-	mov	r0, r6
-	bl	printf
-	ldr	r1, [r5, #8]
-	mov	r0, r6
-	bl	printf
-	add	r5, r5, #12
+	cmp	r4, r6
+	bne	.L85
+	add	r6, r4, #64
 	mov	r0, #10
 	bl	putchar
-	cmp	r5, r7
+	cmp	r6, r8
 	bne	.L84
 	bl	clock
-	movw	ip, #:lower16:augmented_matrix
-	mov	r5, r0
+	movw	r1, #:lower16:augmented_matrix
+	mov	r6, r0
 	mov	r0, #0
-	movt	ip, #:upper16:augmented_matrix
-.L85:
-	mov	r2, ip
-	mov	r3, #0
-	b	.L90
-.L95:
-	ldr	r1, [r4, r3, lsl #2]
-	lsl	r1, r1, #8
-	str	r1, [r2]
+	movt	r1, #:upper16:augmented_matrix
+	add	ip, r1, #2048
 .L87:
+	mov	r3, #0
+	b	.L92
+.L97:
+	ldr	r2, [r5, r3, lsl #2]
+	lsl	r2, r2, #8
+	str	r2, [r1, r3, lsl #2]
+.L89:
 	add	r3, r3, #1
-	add	r2, r2, #4
-.L90:
-	cmp	r3, #2
-	sub	r1, r3, #3
-	bls	.L95
-	cmp	r1, r0
-	moveq	r1, #256
-	movne	r1, #0
-	cmp	r3, #5
-	str	r1, [r2]
-	bne	.L87
+.L92:
+	cmp	r3, #15
+	sub	r2, r3, #16
+	bls	.L97
+	cmp	r2, r0
+	moveq	r2, #256
+	movne	r2, #0
+	cmp	r3, #31
+	str	r2, [r1, r3, lsl #2]
+	bne	.L89
+	add	r1, r1, #128
+	cmp	r1, ip
 	add	r0, r0, #1
-	cmp	r0, #3
-	add	ip, ip, #24
-	add	r4, r4, #12
-	bne	.L85
+	add	r5, r5, #64
+	bne	.L87
 	bl	gauss_jordan_fixed_point
 	bl	clock
 	mov	r4, r0
-	sub	r4, r4, r5
+	sub	r4, r4, r6
 	bl	print_matrix_float
 	vmov	s15, r4	@ int
-	vldr.64	d6, .L96
+	vldr.64	d6, .L98
 	vcvt.f64.s32	d7, s15
 	movw	r0, #:lower16:.LC5
 	vdiv.f64	d7, d7, d6
@@ -467,30 +463,277 @@ main:
 	bl	printf
 	mov	r0, #0
 	pop	{r4, r5, r6, r7, r8, pc}
-.L97:
+.L99:
 	.align	3
-.L96:
+.L98:
 	.word	0
 	.word	1093567616
-	.word	.LANCHOR0+36
+	.word	.LANCHOR0+64
 	.size	main, .-main
-	.comm	augmented_matrix,72,4
+	.comm	augmented_matrix,2048,4
 	.global	test_matrix
 	.data
 	.align	2
 	.set	.LANCHOR0,. + 0
 	.type	test_matrix, %object
-	.size	test_matrix, 36
+	.size	test_matrix, 1024
 test_matrix:
-	.word	3
-	.word	2
-	.word	-4
+	.word	16
 	.word	2
 	.word	3
-	.word	3
+	.word	4
 	.word	5
-	.word	-3
+	.word	6
+	.word	7
+	.word	8
+	.word	9
+	.word	10
+	.word	11
+	.word	12
+	.word	13
+	.word	14
+	.word	15
 	.word	1
+	.word	1
+	.word	15
+	.word	2
+	.word	3
+	.word	4
+	.word	5
+	.word	6
+	.word	7
+	.word	8
+	.word	9
+	.word	10
+	.word	11
+	.word	12
+	.word	13
+	.word	14
+	.word	2
+	.word	2
+	.word	1
+	.word	14
+	.word	2
+	.word	3
+	.word	4
+	.word	5
+	.word	6
+	.word	7
+	.word	8
+	.word	9
+	.word	10
+	.word	11
+	.word	12
+	.word	13
+	.word	3
+	.word	3
+	.word	2
+	.word	1
+	.word	13
+	.word	2
+	.word	3
+	.word	4
+	.word	5
+	.word	6
+	.word	7
+	.word	8
+	.word	9
+	.word	10
+	.word	11
+	.word	12
+	.word	4
+	.word	4
+	.word	3
+	.word	2
+	.word	1
+	.word	12
+	.word	2
+	.word	3
+	.word	4
+	.word	5
+	.word	6
+	.word	7
+	.word	8
+	.word	9
+	.word	10
+	.word	11
+	.word	5
+	.word	5
+	.word	4
+	.word	3
+	.word	2
+	.word	1
+	.word	11
+	.word	2
+	.word	3
+	.word	4
+	.word	5
+	.word	6
+	.word	7
+	.word	8
+	.word	9
+	.word	10
+	.word	6
+	.word	6
+	.word	5
+	.word	4
+	.word	3
+	.word	2
+	.word	1
+	.word	10
+	.word	2
+	.word	3
+	.word	4
+	.word	5
+	.word	6
+	.word	7
+	.word	8
+	.word	9
+	.word	7
+	.word	7
+	.word	6
+	.word	5
+	.word	4
+	.word	3
+	.word	2
+	.word	1
+	.word	9
+	.word	2
+	.word	3
+	.word	4
+	.word	5
+	.word	6
+	.word	7
+	.word	8
+	.word	8
+	.word	8
+	.word	7
+	.word	6
+	.word	5
+	.word	4
+	.word	3
+	.word	2
+	.word	1
+	.word	8
+	.word	2
+	.word	3
+	.word	4
+	.word	5
+	.word	6
+	.word	7
+	.word	9
+	.word	9
+	.word	8
+	.word	7
+	.word	6
+	.word	5
+	.word	4
+	.word	3
+	.word	2
+	.word	1
+	.word	7
+	.word	2
+	.word	3
+	.word	4
+	.word	5
+	.word	6
+	.word	10
+	.word	10
+	.word	9
+	.word	8
+	.word	7
+	.word	6
+	.word	5
+	.word	4
+	.word	3
+	.word	2
+	.word	1
+	.word	6
+	.word	2
+	.word	3
+	.word	4
+	.word	5
+	.word	11
+	.word	11
+	.word	10
+	.word	9
+	.word	8
+	.word	7
+	.word	6
+	.word	5
+	.word	4
+	.word	3
+	.word	2
+	.word	1
+	.word	5
+	.word	2
+	.word	3
+	.word	4
+	.word	12
+	.word	12
+	.word	11
+	.word	10
+	.word	9
+	.word	8
+	.word	7
+	.word	6
+	.word	5
+	.word	4
+	.word	3
+	.word	2
+	.word	1
+	.word	4
+	.word	2
+	.word	3
+	.word	13
+	.word	13
+	.word	12
+	.word	11
+	.word	10
+	.word	9
+	.word	8
+	.word	7
+	.word	6
+	.word	5
+	.word	4
+	.word	3
+	.word	2
+	.word	1
+	.word	3
+	.word	2
+	.word	14
+	.word	14
+	.word	13
+	.word	12
+	.word	11
+	.word	10
+	.word	9
+	.word	8
+	.word	7
+	.word	6
+	.word	5
+	.word	4
+	.word	3
+	.word	2
+	.word	1
+	.word	2
+	.word	15
+	.word	15
+	.word	14
+	.word	13
+	.word	12
+	.word	11
+	.word	10
+	.word	9
+	.word	8
+	.word	7
+	.word	6
+	.word	5
+	.word	4
+	.word	3
+	.word	2
+	.word	1
+	.word	16
 	.section	.rodata.str1.4,"aMS",%progbits,1
 	.align	2
 .LC0:
